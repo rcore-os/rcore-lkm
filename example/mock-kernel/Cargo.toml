@@ -1,0 +1,10 @@
+[package]
+name = "mock-kernel"
+version = "0.1.0"
+authors = ["WangRunji <wangrunji0408@163.com>"]
+edition = "2018"
+
+[dependencies]
+env_logger = "0.6"
+libc = "0.2"
+rcore-lkm = { path = "../.." }
