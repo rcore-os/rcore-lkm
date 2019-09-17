@@ -98,7 +98,7 @@ pub struct LoadedModule {
     pub exported_symbols: Vec<ModuleSymbol>,
     pub used_counts: i32,
     pub using_counts: Arc<ModuleRef>,
-    pub vspace: Box<VSpace>,
+    pub vspace: Box<dyn VSpace>,
     pub lock: Mutex<()>,
     pub state: ModuleState,
 }

@@ -8,9 +8,9 @@ use alloc::sync::Arc;
 use alloc::vec::*;
 use core::mem::transmute;
 use spin::Mutex;
-use xmas_elf::sections::SectionData::{self, DynSymbolTable64, Undefined, Dynamic64};
-use xmas_elf::symbol_table::{DynEntry64, Entry};
 use xmas_elf::dynamic::Dynamic;
+use xmas_elf::sections::SectionData::{self, DynSymbolTable64, Dynamic64, Undefined};
+use xmas_elf::symbol_table::{DynEntry64, Entry};
 use xmas_elf::{header, program::Type, ElfFile};
 
 /// `ModuleManager` is the core part of LKM.
@@ -20,12 +20,12 @@ use xmas_elf::{header, program::Type, ElfFile};
 pub struct ModuleManager {
     stub_symbols: BTreeMap<String, ModuleSymbol>,
     loaded_modules: Vec<Box<LoadedModule>>,
-    provider: Box<Provider>,
+    provider: Box<dyn Provider>,
 }
 
 /// Provider for `ModuleManager`
 pub trait Provider: Send {
-    fn map(&mut self, len: usize) -> Result<Box<VSpace>, &'static str>;
+    fn map(&mut self, len: usize) -> Result<Box<dyn VSpace>, &'static str>;
 }
 
 impl ModuleManager {
@@ -69,7 +69,12 @@ impl ModuleManager {
         self.loaded_modules.iter_mut().find(|m| m.info.name == name)
     }
 
-    pub fn init_module(&mut self, module_image: &[u8], _param_values: &str) -> LKMResult<()> {
+    pub fn init_module(
+        &mut self,
+        module_image: &[u8],
+        _param_values: &str,
+        arg: usize,
+    ) -> LKMResult<()> {
         let elf =
             ElfFile::new(module_image).map_err(|_| Error::new(Invalid, "failed to read elf"))?;
 
@@ -197,7 +202,7 @@ impl ModuleManager {
             },
         )?;
         info!("[LKM] relocation done. adding module to manager and call init_module");
-        let mut lkm_entry: usize = 0;
+        let mut lkm_entry: usize = base + elf.header.pt2.entry_point() as usize;
         for exported in loaded_minfo.info.exported_symbols.iter() {
             for sym in elf.dynsym()? {
                 let name = sym
@@ -245,13 +250,9 @@ impl ModuleManager {
             //     debug!("[LKM] calling init at {:?}", init_fn);
             //     init_fn();
             // }
-            let init_module: unsafe extern "C" fn() = transmute(lkm_entry);
+            let init_module: unsafe extern "C" fn(usize) = transmute(lkm_entry);
             debug!("[LKM] calling init_module at {:?}", init_module);
-            k();
-            init_module();
-            #[inline(never)]
-            #[no_mangle]
-            fn k() {}
+            init_module(arg);
         }
         Ok(())
     }
