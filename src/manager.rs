@@ -89,11 +89,11 @@ impl ModuleManager {
 
         // check type
         match elf.header.pt2.type_().as_type() {
-            header::Type::SharedObject => {}
+            header::Type::SharedObject | header::Type::Executable => {}
             _ => {
                 return Err(Error::new(
                     NoExec,
-                    "a kernel module must be some shared object",
+                    "a kernel module must be some shared object or executable",
                 ))
             }
         }
@@ -395,15 +395,16 @@ impl ElfExt for ElfFile<'_> {
         // define a closure to relocate one symbol
         let relocate_symbol =
             |sti: usize, offset: usize, addend: usize, itype: usize| -> LKMResult<()> {
-                if sti == 0 {
-                    return Ok(());
-                }
-                let dynsym = &dynsym[sti];
-                let sym_val = if dynsym.shndx() == 0 {
-                    let name = dynsym.get_name(self)?;
-                    query_symbol_location(name).ok_or(format!("symbol not found: {}", name))?
+                let sym_val = if sti == 0 {
+                    0
                 } else {
-                    base + dynsym.value() as usize
+                    let dynsym = &dynsym[sti];
+                    if dynsym.shndx() == 0 {
+                        let name = dynsym.get_name(self)?;
+                        query_symbol_location(name).ok_or(format!("symbol not found: {}", name))?
+                    } else {
+                        base + dynsym.value() as usize
+                    }
                 };
                 match itype as usize {
                     loader::REL_NONE => {}
